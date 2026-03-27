@@ -1,0 +1,26 @@
+[run]
+source = src/plugin_template
+omit =
+    */tests/*
+    */migrations/*
+    */__pycache__/*
+    *dishka*
+    *__dishka*
+    */site-packages/*
+    *__dishka_factory_*
+branch = False
+disable_warnings =
+    no-source,
+    couldnt-parse,
+    module-not-claimed
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+ignore_errors = True
+show_missing = True
+fail_under = 80
+
+[html]
+directory = htmlcov

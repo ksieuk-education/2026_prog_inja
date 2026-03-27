@@ -1,0 +1,30 @@
+services:
+  base: &base
+    build:
+      context: src
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      TZ: "${TZ:-Europe/Moscow}"
+    volumes:
+      - ./.configs/:/opt/app/.configs
+
+  app-client:
+    <<: *base
+    container_name: app-client
+    image: app-client
+    build:
+      context: src
+      dockerfile: Dockerfile
+      target: client
+    restart: always
+    entrypoint: [ "/opt/app/entrypoint.sh" ]
+    ports:
+      - "${API_PORT}:${API_PORT}"
+    volumes:
+      - ./.configs/:/opt/app/.configs
+      - sqlite_data:/opt/app/data
+
+volumes:
+  sqlite_data:

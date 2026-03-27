@@ -1,0 +1,39 @@
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Artifacts
+*.whl
+
+# Dependencies
+.venv/
+node_modules/
+
+# Python cache
+__pycache__/
+.pytest_cache/
+
+# Coverage
+.coverage
+
+# Dists
+dist/
+
+# Тут конфиги для локального запуска
+.configs/config.yaml
+.env
+
+# Локальная SQLite по умолчанию
+/data/
+
+# Логи
+logs
+
+# Креды
+.netrc
