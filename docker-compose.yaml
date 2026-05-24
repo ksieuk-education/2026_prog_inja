@@ -27,7 +27,8 @@ services:
       TZ: "${TZ:-Europe/Moscow}"
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d taxidb"]
       interval: 5s

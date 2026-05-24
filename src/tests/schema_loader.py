@@ -1,12 +1,12 @@
-"""Применение DDL из docker/postgres/initdb для тестовой БД."""
+"""Применение DDL из schema.sql для тестовой БД."""
 
 import pathlib
 import re
 
 
 def schema_sql_path() -> pathlib.Path:
-    """Путь к init-скрипту схемы (тот же, что монтируется в PostgreSQL в Docker)."""
-    return pathlib.Path(__file__).resolve().parents[2] / "docker" / "postgres" / "initdb" / "01-schema.sql"
+    """Путь к schema.sql в корне репозитория."""
+    return pathlib.Path(__file__).resolve().parents[2] / "schema.sql"
 
 
 def load_schema_statements() -> list[str]:

@@ -50,4 +50,5 @@ Dynamic‑view показывает сценарий **создания зака
 
 - `readme.md` – краткое описание варианта и того, что нарисовано в C4‑модели.
 - `workspace.dsl` – модель системы и набор view в формате Structurizr DSL.
+- [`db/README.md`](db/README.md) – схема и SQL.
 
