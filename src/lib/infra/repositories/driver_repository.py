@@ -1,8 +1,6 @@
-"""Репозиторий водителей (SQLite)."""
+"""Репозиторий водителей (PostgreSQL)."""
 
-import sqlite3
-
-import aiosqlite
+import asyncpg
 
 from lib.app.common.repositories import IDriverRepository
 from lib.app.domain.entities import Driver
@@ -12,7 +10,7 @@ from lib.infra.common.errors import SaveError
 class DriverRepository(IDriverRepository):
     """Регистрация и чтение водителей."""
 
-    def __init__(self, conn: aiosqlite.Connection) -> None:
+    def __init__(self, conn: asyncpg.Connection) -> None:
         self._conn = conn
 
     async def create(self, driver: Driver) -> Driver:
@@ -20,37 +18,36 @@ class DriverRepository(IDriverRepository):
             msg = "при создании водителя поле id должно быть пустым"
             raise ValueError(msg)
         try:
-            cur = await self._conn.execute(
-                "INSERT INTO drivers (user_id) VALUES (?)",
-                (driver.user_id,),
+            row = await self._conn.fetchrow(
+                """
+                INSERT INTO drivers (user_id) VALUES ($1)
+                RETURNING id, user_id
+                """,
+                driver.user_id,
             )
-        except sqlite3.IntegrityError as exc:
+        except asyncpg.UniqueViolationError as exc:
             raise SaveError("ошибка сохранения водителя: дубликат или нарушение ограничений БД") from exc
-        new_id = cur.lastrowid
-        await cur.close()
-        if new_id is None:
-            msg = "после вставки строки не получен идентификатор (lastrowid)"
+        except asyncpg.ForeignKeyViolationError as exc:
+            raise SaveError("ошибка сохранения водителя: дубликат или нарушение ограничений БД") from exc
+        if row is None:  # pragma: no cover
+            msg = "после вставки строки не получена запись"
             raise RuntimeError(msg)
-        return Driver(id=int(new_id), user_id=driver.user_id)
+        return Driver(id=row["id"], user_id=row["user_id"])
 
     async def get_by_id(self, driver_id: int) -> Driver | None:
-        cur = await self._conn.execute(
-            "SELECT id, user_id FROM drivers WHERE id = ?",
-            (driver_id,),
+        row = await self._conn.fetchrow(
+            "SELECT id, user_id FROM drivers WHERE id = $1",
+            driver_id,
         )
-        row = await cur.fetchone()
-        await cur.close()
         if row is None:
             return None
         return Driver(id=row["id"], user_id=row["user_id"])
 
     async def get_by_user_id(self, user_id: int) -> Driver | None:
-        cur = await self._conn.execute(
-            "SELECT id, user_id FROM drivers WHERE user_id = ?",
-            (user_id,),
+        row = await self._conn.fetchrow(
+            "SELECT id, user_id FROM drivers WHERE user_id = $1",
+            user_id,
         )
-        row = await cur.fetchone()
-        await cur.close()
         if row is None:
             return None
         return Driver(id=row["id"], user_id=row["user_id"])

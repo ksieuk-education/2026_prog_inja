@@ -1,8 +1,6 @@
-"""Репозиторий пользователей (SQLite)."""
+"""Репозиторий пользователей (PostgreSQL)."""
 
-import sqlite3
-
-import aiosqlite
+import asyncpg
 
 from lib.app.common.repositories import IUserRepository
 from lib.app.domain.entities import User
@@ -10,9 +8,9 @@ from lib.infra.common.errors import SaveError
 
 
 class UserRepository(IUserRepository):
-    """CRUD пользователей в одной SQLite-транзакции."""
+    """CRUD пользователей в одной транзакции PostgreSQL."""
 
-    def __init__(self, conn: aiosqlite.Connection) -> None:
+    def __init__(self, conn: asyncpg.Connection) -> None:
         self._conn = conn
 
     async def create(self, user: User) -> User:
@@ -20,61 +18,80 @@ class UserRepository(IUserRepository):
             msg = "при создании пользователя поле id должно быть пустым"
             raise ValueError(msg)
         try:
-            cur = await self._conn.execute(
+            row = await self._conn.fetchrow(
                 """
-                INSERT INTO users (login, first_name, last_name)
-                VALUES (?, ?, ?)
+                INSERT INTO users (login, first_name, last_name, password_hash)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id, login, first_name, last_name, password_hash
                 """,
-                (user.login, user.first_name, user.last_name),
+                user.login,
+                user.first_name,
+                user.last_name,
+                user.password_hash,
             )
-        except sqlite3.IntegrityError as exc:
+        except asyncpg.UniqueViolationError as exc:
             raise SaveError("ошибка сохранения пользователя: дубликат или нарушение ограничений БД") from exc
-        new_id = cur.lastrowid
-        await cur.close()
-        if new_id is None:
-            msg = "после вставки строки не получен идентификатор (lastrowid)"
+        if row is None:  # pragma: no cover
+            msg = "после вставки строки не получена запись"
             raise RuntimeError(msg)
         return User(
-            id=int(new_id),
-            login=user.login,
-            first_name=user.first_name,
-            last_name=user.last_name,
+            id=row["id"],
+            login=row["login"],
+            first_name=row["first_name"],
+            last_name=row["last_name"],
+            password_hash=row["password_hash"],
         )
 
     async def get_by_id(self, user_id: int) -> User | None:
-        cur = await self._conn.execute(
-            "SELECT id, login, first_name, last_name FROM users WHERE id = ?",
-            (user_id,),
+        row = await self._conn.fetchrow(
+            "SELECT id, login, first_name, last_name, password_hash FROM users WHERE id = $1",
+            user_id,
         )
-        row = await cur.fetchone()
-        await cur.close()
         if row is None:
             return None
-        return User(id=row["id"], login=row["login"], first_name=row["first_name"], last_name=row["last_name"])
+        return User(
+            id=row["id"],
+            login=row["login"],
+            first_name=row["first_name"],
+            last_name=row["last_name"],
+            password_hash=row["password_hash"],
+        )
 
     async def get_by_login(self, login: str) -> User | None:
-        cur = await self._conn.execute(
-            "SELECT id, login, first_name, last_name FROM users WHERE login = ? COLLATE NOCASE",
-            (login,),
+        row = await self._conn.fetchrow(
+            """
+            SELECT id, login, first_name, last_name, password_hash
+            FROM users WHERE lower(login) = lower($1)
+            """,
+            login,
         )
-        row = await cur.fetchone()
-        await cur.close()
         if row is None:
             return None
-        return User(id=row["id"], login=row["login"], first_name=row["first_name"], last_name=row["last_name"])
+        return User(
+            id=row["id"],
+            login=row["login"],
+            first_name=row["first_name"],
+            last_name=row["last_name"],
+            password_hash=row["password_hash"],
+        )
 
     async def search_by_name_mask(self, pattern: str) -> list[User]:
         like = pattern if "%" in pattern or "_" in pattern else f"%{pattern}%"
-        cur = await self._conn.execute(
+        rows = await self._conn.fetch(
             """
-            SELECT id, login, first_name, last_name FROM users
-            WHERE (first_name || ' ' || last_name) LIKE ? COLLATE NOCASE
+            SELECT id, login, first_name, last_name, password_hash FROM users
+            WHERE (first_name || ' ' || last_name) ILIKE $1
             ORDER BY last_name, first_name
             """,
-            (like,),
+            like,
         )
-        rows = await cur.fetchall()
-        await cur.close()
         return [
-            User(id=r["id"], login=r["login"], first_name=r["first_name"], last_name=r["last_name"]) for r in rows
+            User(
+                id=r["id"],
+                login=r["login"],
+                first_name=r["first_name"],
+                last_name=r["last_name"],
+                password_hash=r["password_hash"],
+            )
+            for r in rows
         ]

@@ -21,6 +21,7 @@ class User:
     login: str
     first_name: str
     last_name: str
+    password_hash: str = ""
 
 
 @dataclass(slots=True)
