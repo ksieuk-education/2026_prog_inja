@@ -11,6 +11,18 @@ app_settings:
   timezone_offset_hours: 3
   timezone_name: "UTC+3"
 
+auth_settings:
+  jwt_secret: "change-me-in-production-use-env"
+  jwt_algorithm: "HS256"
+  access_token_expire_minutes: 60
+
+database_settings:
+  host: taxi-postgres
+  port: 5432
+  database: taxidb
+  user: user
+  password: taxipass
+
 logging_settings:
   log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   log_default_handlers: ["console"]

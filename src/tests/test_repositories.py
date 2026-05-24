@@ -1,6 +1,8 @@
-"""Прямые тесты SQLite-репозиториев (без Dishka)."""
+"""Прямые тесты PostgreSQL-репозиториев (без Dishka)."""
 
-import aiosqlite
+from uuid import uuid4
+
+import asyncpg
 import pytest
 import pytest_asyncio
 
@@ -13,51 +15,53 @@ from lib.main.settings import Settings
 
 
 @pytest_asyncio.fixture
-async def db_conn(test_settings: Settings) -> aiosqlite.Connection:
-    """Одно соединение, одна транзакция; в конце откат для изоляции следующих операций в том же файле."""
-    conn = await aiosqlite.connect(test_settings.database_settings.sqlite_path)
-    conn.row_factory = aiosqlite.Row
-    await conn.execute("PRAGMA foreign_keys = ON")
-    await conn.execute("BEGIN")
-    yield conn
-    await conn.rollback()
-    await conn.close()
+async def db_conn(test_settings: Settings) -> asyncpg.Connection:
+    """Одно соединение, одна транзакция; в конце откат для изоляции следующих операций."""
+    conn = await asyncpg.connect(test_settings.database_settings.build_dsn())
+    transaction = conn.transaction()
+    await transaction.start()
+    try:
+        yield conn
+    finally:
+        await transaction.rollback()
+        await conn.close()
 
 
-def _users(conn: aiosqlite.Connection) -> UserRepository:
+def _users(conn: asyncpg.Connection) -> UserRepository:
     return UserRepository(conn)
 
 
-def _drivers(conn: aiosqlite.Connection) -> DriverRepository:
+def _drivers(conn: asyncpg.Connection) -> DriverRepository:
     return DriverRepository(conn)
 
 
-def _trips(conn: aiosqlite.Connection, settings: Settings) -> TripRepository:
+def _trips(conn: asyncpg.Connection, settings: Settings) -> TripRepository:
     return TripRepository(conn, settings.app_settings.get_timezone())
 
 
 @pytest.mark.asyncio
-async def test_user_repository_get_by_id_returns_none(db_conn: aiosqlite.Connection) -> None:
+async def test_user_repository_get_by_id_returns_none(db_conn: asyncpg.Connection) -> None:
     assert await _users(db_conn).get_by_id(999) is None
 
 
 @pytest.mark.asyncio
-async def test_user_repository_create_rejects_preset_id(db_conn: aiosqlite.Connection) -> None:
+async def test_user_repository_create_rejects_preset_id(db_conn: asyncpg.Connection) -> None:
     with pytest.raises(ValueError, match="id должно быть пустым"):
         await _users(db_conn).create(User(1, "a", "A", "B"))
 
 
 @pytest.mark.asyncio
-async def test_user_repository_search_wraps_plain_mask(db_conn: aiosqlite.Connection) -> None:
+async def test_user_repository_search_wraps_plain_mask(db_conn: asyncpg.Connection) -> None:
+    token = uuid4().hex[:8]
     repo = _users(db_conn)
-    await repo.create(User(None, "u1", "Мария", "Иванова"))
-    hits = await repo.search_by_name_mask("Иванов")
+    await repo.create(User(None, f"u1_{token}", "Мария", f"Иванова{token}"))
+    hits = await repo.search_by_name_mask(f"Иванова{token}")
     assert len(hits) == 1
-    assert hits[0].last_name == "Иванова"
+    assert hits[0].last_name == f"Иванова{token}"
 
 
 @pytest.mark.asyncio
-async def test_driver_repository_get_by_id_and_user(db_conn: aiosqlite.Connection) -> None:
+async def test_driver_repository_get_by_id_and_user(db_conn: asyncpg.Connection) -> None:
     urepo, drepo = _users(db_conn), _drivers(db_conn)
     user = await urepo.create(User(None, "du", "Д", "У"))
     assert user.id is not None
@@ -71,13 +75,13 @@ async def test_driver_repository_get_by_id_and_user(db_conn: aiosqlite.Connectio
 
 
 @pytest.mark.asyncio
-async def test_driver_repository_fk_violation(db_conn: aiosqlite.Connection) -> None:
+async def test_driver_repository_fk_violation(db_conn: asyncpg.Connection) -> None:
     with pytest.raises(SaveError, match="водителя"):
         await _drivers(db_conn).create(Driver(None, 999_999))
 
 
 @pytest.mark.asyncio
-async def test_driver_repository_duplicate_user(db_conn: aiosqlite.Connection) -> None:
+async def test_driver_repository_duplicate_user(db_conn: asyncpg.Connection) -> None:
     urepo, drepo = _users(db_conn), _drivers(db_conn)
     u = await urepo.create(User(None, "one", "О", "Дин"))
     assert u.id is not None
@@ -87,19 +91,19 @@ async def test_driver_repository_duplicate_user(db_conn: aiosqlite.Connection) -
 
 
 @pytest.mark.asyncio
-async def test_driver_repository_create_rejects_preset_id(db_conn: aiosqlite.Connection) -> None:
+async def test_driver_repository_create_rejects_preset_id(db_conn: asyncpg.Connection) -> None:
     with pytest.raises(ValueError, match="id должно быть пустым"):
         await _drivers(db_conn).create(Driver(1, 1))
 
 
 @pytest.mark.asyncio
-async def test_trip_repository_get_missing(db_conn: aiosqlite.Connection, test_settings: Settings) -> None:
+async def test_trip_repository_get_missing(db_conn: asyncpg.Connection, test_settings: Settings) -> None:
     assert await _trips(db_conn, test_settings).get_by_id(999) is None
 
 
 @pytest.mark.asyncio
 async def test_trip_repository_create_rejects_preset_id(
-    db_conn: aiosqlite.Connection,
+    db_conn: asyncpg.Connection,
     test_settings: Settings,
 ) -> None:
     with pytest.raises(ValueError, match="id должно быть пустым"):
@@ -110,7 +114,7 @@ async def test_trip_repository_create_rejects_preset_id(
 
 @pytest.mark.asyncio
 async def test_trip_repository_accept_complete_idempotent(
-    db_conn: aiosqlite.Connection,
+    db_conn: asyncpg.Connection,
     test_settings: Settings,
 ) -> None:
     urepo, drepo, trepo = _users(db_conn), _drivers(db_conn), _trips(db_conn, test_settings)
@@ -133,7 +137,7 @@ async def test_trip_repository_accept_complete_idempotent(
 
 @pytest.mark.asyncio
 async def test_trip_repository_complete_fails_on_pending(
-    db_conn: aiosqlite.Connection,
+    db_conn: asyncpg.Connection,
     test_settings: Settings,
 ) -> None:
     urepo, trepo = _users(db_conn), _trips(db_conn, test_settings)
@@ -146,7 +150,7 @@ async def test_trip_repository_complete_fails_on_pending(
 
 @pytest.mark.asyncio
 async def test_trip_repository_list_history_only_completed(
-    db_conn: aiosqlite.Connection,
+    db_conn: asyncpg.Connection,
     test_settings: Settings,
 ) -> None:
     urepo, drepo, trepo = _users(db_conn), _drivers(db_conn), _trips(db_conn, test_settings)
@@ -168,7 +172,7 @@ async def test_trip_repository_list_history_only_completed(
 
 @pytest.mark.asyncio
 async def test_trip_repository_active_lists_pending_and_active(
-    db_conn: aiosqlite.Connection,
+    db_conn: asyncpg.Connection,
     test_settings: Settings,
 ) -> None:
     urepo, drepo, trepo = _users(db_conn), _drivers(db_conn), _trips(db_conn, test_settings)

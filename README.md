@@ -1,10 +1,10 @@
 # Сервис такси (учебный REST API)
 
-Учебный backend на **FastAPI**: пользователи, водители и заказы поездок. Данные хранятся в **SQLite**, доступ к БД и транзакциям — через **Dishka** (Unit of Work на запрос). Время в ответах по `created_at` приводится к часовому поясу из настроек приложения (по умолчанию **UTC+3**).
+Учебный backend на **FastAPI**: пользователи, водители и заказы поездок. Данные хранятся в **PostgreSQL**, доступ к БД и транзакциям — через **Dishka** (Unit of Work на запрос). Время в ответах по `created_at` приводится к часовому поясу из настроек приложения (по умолчанию **UTC+3**).
 
 ## Запуск в Docker
 
-В репозитории есть `docker-compose.yaml` для сервиса **app-client** (сборка из `src/Dockerfile`, том под SQLite в `/opt/app/data`). Порт пробрасывается через переменную **`API_PORT`** в `.env`.
+В репозитории есть `docker-compose.yaml`: **taxi-postgres** (схема из `docker/postgres/initdb/`) и **app-client** (сборка из `src/Dockerfile`). Порт API пробрасывается через переменную **`API_PORT`** в `.env`.
 
 ```bash
 cp .env.example .env
@@ -61,7 +61,7 @@ cd src
 poetry run python -m bin
 ```
 
-Файл SQLite по умолчанию: `data/app.db` (относительно текущего каталога процесса; каталог создаётся при старте).
+PostgreSQL по умолчанию: `localhost:5432`, БД `taxidb` (см. `database_settings` в конфиге и `.env.example`). DDL применяется при первом старте контейнера из `docker/postgres/initdb/`.
 
 
 ## Примеры вызовов API
@@ -148,5 +148,5 @@ poetry run pytest tests/ -v
 - `lib/application/dto` — Pydantic-модели запросов/ответов  
 - `lib/present/api/routes` — FastAPI-роуты  
 - `lib/app` — доменные сущности и контракты (UoW, репозитории)  
-- `lib/infra` — SQLite, репозитории, схема БД  
+- `lib/infra` — PostgreSQL (asyncpg), репозитории; DDL в `docker/postgres/initdb/`  
 - `lib/main` — настройки, DI (Dishka), точка входа веб-приложения  

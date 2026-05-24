@@ -1,4 +1,4 @@
-"""Репозитории SQLite."""
+"""Репозитории PostgreSQL."""
 
 from lib.infra.repositories.driver_repository import DriverRepository
 from lib.infra.repositories.trip_repository import TripRepository

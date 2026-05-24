@@ -9,6 +9,30 @@ services:
       TZ: "${TZ:-Europe/Moscow}"
     volumes:
       - ./.configs/:/opt/app/.configs
+    networks:
+      - taxi-net
+
+  taxi-postgres:
+    image: postgres:16-alpine
+    container_name: taxi-postgres
+    restart: unless-stopped
+    networks:
+      - taxi-net
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: taxidb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: taxipass
+      TZ: "${TZ:-Europe/Moscow}"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d taxidb"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   app-client:
     <<: *base
@@ -19,12 +43,21 @@ services:
       dockerfile: Dockerfile
       target: client
     restart: always
-    entrypoint: [ "/opt/app/entrypoint.sh" ]
+    entrypoint: ["/opt/app/entrypoint.sh"]
     ports:
       - "${API_PORT}:${API_PORT}"
-    volumes:
-      - ./.configs/:/opt/app/.configs
-      - sqlite_data:/opt/app/data
+    depends_on:
+      taxi-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_SETTINGS__HOST: taxi-postgres
+      DATABASE_SETTINGS__PORT: 5432
+      DATABASE_SETTINGS__DATABASE: taxidb
+      DATABASE_SETTINGS__USER: user
+      DATABASE_SETTINGS__PASSWORD: taxipass
+
+networks:
+  taxi-net:
 
 volumes:
-  sqlite_data:
+  pg_data:
